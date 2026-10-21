@@ -1,0 +1,269 @@
+openapi: 3.0.3
+
+info:
+  title: TexSum API
+  description: >
+      Сервис автоматического краткого пересказа текста TexSum.
+      Поддерживаемые форматы: txt, docx, md, pdf, fb2, epub.
+      Поддерживаемые языки: ru, en-US.
+  version: 1.0.0
+
+servers:
+- url: https://api.example.com/v1
+
+paths:
+  /summaries:
+    post:
+      summary: Создать задачу на генерацию краткого пересказа текста
+      description: >
+        Принимает текст (JSON) или файл (multipart/form-data) и параметры
+        генерации. Возвращает идентификатор задачи; результат доступен
+        через GET /summaries/{summary_id}.
+      operationId: createSummary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TextSummaryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FileSummaryRequest'
+      responses:
+        '202':
+          description: Задача принята в обработку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryAccepted'
+        '400':
+          description: Некорректные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Файл или текст превышает допустимый размер
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: Неподдерживаемый формат файла
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Текст слишком короткий или на неподдерживаемом языке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /summaries/{summary_id}:
+    get:
+      summary: Получить статус и результат задачи пересказа
+      operationId: getSummary
+      parameters:
+        - name: summary_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Статус задачи (и результат, если готово)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryResult'
+        '404':
+          description: Задача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/validate:
+    post:
+      summary: Проверить файл на повреждение, формат и язык
+      description: >
+        Выполняет быструю проверку файла без запуска генерации пересказа:
+        расширение, MIME-тип, целостность, возможность извлечения текста,
+        поддерживаемый язык.
+      operationId: validateFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Результат валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileValidationResult'
+        '400':
+          description: Файл не передан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    SummaryOptions:
+      type: object
+      required: [reading_time_minutes]
+      properties:
+        reading_time_minutes:
+          type: integer
+          minimum: 1
+          maximum: 60
+          description: Желаемое время чтения пересказа в минутах
+        language:
+          type: string
+          enum: [ru, en-US]
+          description: Ожидаемый язык текста
+        include_sections:
+          type: boolean
+          default: true
+          description: Включать в результат основные разделы текста
+
+    TextSummaryRequest:
+      type: object
+      required: [text, options]
+      properties:
+        text:
+          type: string
+          minLength: 500
+          description: Исходный текст для пересказа
+        options:
+          $ref: '#/components/schemas/SummaryOptions'
+
+    FileSummaryRequest:
+      type: object
+      required: [file, options]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: Файл в форматах txt, docx, md, pdf, fb2, epub
+        options:
+          $ref: '#/components/schemas/SummaryOptions'
+
+    SummaryAccepted:
+      type: object
+      required: [summary_id, status]
+      properties:
+        summary_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing]
+        created_at:
+          type: string
+          format: date-time
+
+    SummaryResult:
+      type: object
+      required: [summary_id, status]
+      properties:
+        summary_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        result:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/SummaryContent'
+        error:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Error'
+
+    SummaryContent:
+      type: object
+      required: [summary, estimated_reading_minutes]
+      properties:
+        summary:
+          type: string
+          description: Краткий пересказ текста
+        sections:
+          type: array
+          description: Основные разделы текста
+          items:
+            type: object
+            required: [title]
+            properties:
+              title:
+                type: string
+              summary:
+                type: string
+        key_definitions:
+          type: array
+          description: Основные определения и идеи (если были)
+          items:
+            type: object
+            required: [term, definition]
+            properties:
+              term:
+                type: string
+              definition:
+                type: string
+        estimated_reading_minutes:
+          type: number
+          description: Примерное время чтения пересказа в минутах
+
+    FileValidationResult:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+        detected_format:
+          type: string
+          nullable: true
+          enum: [txt, docx, md, pdf, fb2, epub]
+        detected_language:
+          type: string
+          nullable: true
+          enum: [ru, en-US]
+        text_length_chars:
+          type: integer
+          nullable: true
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Error'
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+          example: UNSUPPORTED_FORMAT
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки, готовое для отображения на сайте

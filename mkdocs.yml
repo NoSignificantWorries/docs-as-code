@@ -11,6 +11,7 @@ theme:
 
 nav:
   - Главная: index.md
+  - API: api/index.md
   - Проект:
       - Описание: project/overview.md
       - Требования: project/requirements.md
