@@ -29,6 +29,9 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/FileSummaryRequest'
+            encoding:
+              options:
+                contentType: application/json
       responses:
         '202':
           description: Задача принята в обработку
@@ -79,6 +82,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SummaryResult'
+        '400':
+          description: summary_id не является корректным UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Задача не найдена
           content:
@@ -118,6 +127,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '413':
+          description: >
+            Файл физически превышает допустимый размер - проверка
+            отклонена до валидации содержимого
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: >
+            Расширение или MIME-тип файла не поддерживается - проверка
+            отклонена до валидации содержимого
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   schemas:
@@ -146,6 +171,7 @@ components:
         text:
           type: string
           minLength: 500
+          maxLength: 200000
           description: Исходный текст для пересказа
         options:
           $ref: '#/components/schemas/SummaryOptions'
@@ -243,11 +269,11 @@ components:
         detected_format:
           type: string
           nullable: true
-          enum: [txt, docx, md, pdf, fb2, epub]
+          enum: [txt, docx, md, pdf, fb2, epub, null]
         detected_language:
           type: string
           nullable: true
-          enum: [ru, en-US]
+          enum: [ru, en-US, null]
         text_length_chars:
           type: integer
           nullable: true
@@ -267,3 +293,5 @@ components:
         message:
           type: string
           description: Человекочитаемое описание ошибки, готовое для отображения на сайте
+
+
